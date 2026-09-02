@@ -25,6 +25,12 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The ODG_BOT App credentials are scoped to this environment (same as in
+    # renovate.yml) — without it vars.ODG_BOT_APP_ID / secrets.ODG_BOT_PRIVATE_KEY
+    # are not visible and the steps below fall back to GITHUB_TOKEN.
+    environment:
+      name: renovate
+      deployment: false
     permissions:
       contents: write # release commit, tag, GitHub release
       pull-requests: write # the release PR
@@ -63,6 +69,11 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Same `renovate` environment as above: the ODG_BOT App credentials are
+    # scoped to it.
+    environment:
+      name: renovate
+      deployment: false
     permissions:
       contents: write
     env:
