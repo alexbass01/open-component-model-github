@@ -32,9 +32,26 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # Writes (release branch, release PR, tag, release) authenticate as the
+      # ODG_BOT GitHub App when configured — same pattern as renovate.yml. App
+      # tokens are not subject to the "Allow GitHub Actions to create and
+      # approve pull requests" repository setting, which the GITHUB_TOKEN
+      # fallback (e.g. on forks without the App configured) is.
+      - name: Generate App token
+        if: vars.ODG_BOT_APP_ID != ''
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.ODG_BOT_APP_ID }}
+          private-key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
   # Releases created with GITHUB_TOKEN do not fire `release: published`
   # events, so a separate release-triggered workflow could never move the
@@ -51,10 +68,22 @@ jobs:
     env:
       TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
+      # Pushing the re-pinned tag uses the ODG_BOT App token when configured
+      # (see release-please job); checkout persists it for the git push.
+      - name: Generate App token
+        if: vars.ODG_BOT_APP_ID != ''
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.ODG_BOT_APP_ID }}
+          private-key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout (with tags)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
       - name: Re-pin floating major tag
         run: |
           set -euo pipefail
