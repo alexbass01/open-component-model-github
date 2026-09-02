@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/alexbass01/open-component-model-github/compare/v1.1.0...v1.1.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* bump to v5 and add README for renovate ([f39036b](https://github.com/alexbass01/open-component-model-github/commit/f39036bb5ad823daeed62eb6794cdde428028e23))
+
 ## [1.1.0](https://github.com/alexbass01/open-component-model-github/compare/v1.0.0...v1.1.0) (2026-09-02)
 
 
