@@ -16,12 +16,14 @@ on:
     branches:
       - main
     # Only the shared Renovate setup is released for now run the releaser
-    # exclusively when one of its files changes.
+    # exclusively when one of its files changes or a release please PR is merged.
     paths:
       - '.github/workflows/renovate.yml'
       - '.github/workflows/renovate-schedule.yml'
       - '.github/renovate.json5'
       - '.github/renovate-repositories.json'
+      - '.release-please-manifest.json'
+      - 'CHANGELOG.md'
   # Manual recovery: re-run the releaser (e.g. after a failed tag move).
   workflow_dispatch: {}
 
