@@ -1,4 +1,4 @@
-name: Renovate
+name: Renovate Open Delivery Gear
 # Reusable renovate runner for ONE target repository (inputs.repository).
 #
 # Callers:
