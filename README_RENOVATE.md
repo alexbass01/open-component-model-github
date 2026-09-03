@@ -75,7 +75,7 @@ conventional commits on `main`:
 
 Flow:
 
-1. Every push to `main` runs `release-please.yml`, which maintains an accumulating
+1. Every push to `main` that changes renovate-related files runs `release-please.yml`, which maintains an accumulating
    **release PR** (`chore(main): release X.Y.Z`) with changelog and version bump.
 2. **Merging the release PR is the release.** release-please creates tag `vX.Y.Z`
    and the GitHub release; the `move-major-tag` job in the same workflow then
