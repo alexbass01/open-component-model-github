@@ -18,16 +18,11 @@ on:
         description: 'Target repository (owner/name)'
         required: true
         type: string
-      centralRepo:
-        description: 'Repository hosting the central renovate config (default: vars.RENOVATE_CENTRAL_REPO or open-component-model/.github)'
+      centralConfig:
+        description: 'Central renovate config to consume, "owner/repo@ref" (default: vars.RENOVATE_CENTRAL_CONFIG or open-component-model/.github@v1)'
         required: false
         type: string
         default: ''
-      centralRef:
-        description: 'Ref of centralRepo to take the central config from'
-        required: false
-        type: string
-        default: main
       repoCache:
         description: 'Repository cache: enabled (use + update), disabled (skip), reset (discard old, start fresh)'
         type: string
@@ -56,16 +51,11 @@ on:
         description: 'Target repository (owner/name), e.g. open-component-model/ocm'
         required: true
         type: string
-      centralRepo:
-        description: 'Repository hosting the central renovate config (default: vars.RENOVATE_CENTRAL_REPO or open-component-model/.github)'
+      centralConfig:
+        description: 'Central renovate config to consume, "owner/repo@ref" (default: vars.RENOVATE_CENTRAL_CONFIG or open-component-model/.github@v1)'
         required: false
         type: string
         default: ''
-      centralRef:
-        description: 'Ref of centralRepo to take the central config from'
-        required: false
-        type: string
-        default: main
       repoCache:
         description: 'Repository cache: enabled (use + update), disabled (skip), reset (discard old, start fresh)'
         type: choice
@@ -100,8 +90,12 @@ env:
   # validation and the renovate run itself).
   central_config_file: .github/renovate.json5
   RENOVATE_CONFIG_FILE: ${{ github.workspace }}/central/.github/renovate.json5
-  CENTRAL_REPO: ${{ inputs.centralRepo || vars.RENOVATE_CENTRAL_REPO || 'open-component-model/.github' }}
-  CENTRAL_REF: ${{ inputs.centralRef || 'main' }}
+  # Central config location ("owner/repo@ref"), split into CENTRAL_REPO /
+  # CENTRAL_REF per job by the "Resolve central config location" step below —
+  # expression contexts cannot split strings. The default tracks the floating
+  # major tag, so consumers pinning the workflow to @vX get the matching
+  # config line; forks point vars.RENOVATE_CENTRAL_CONFIG at their own copy.
+  CENTRAL_CONFIG: ${{ inputs.centralConfig || vars.RENOVATE_CENTRAL_CONFIG || 'open-component-model/.github@v1' }}
 
 jobs:
   # validate is side-effect-free and runs everywhere (incl. forks).
@@ -109,6 +103,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Resolve central config location
+        run: |
+          set -euo pipefail
+          if [[ ! "$CENTRAL_CONFIG" =~ ^([^/@[:space:]]+/[^/@[:space:]]+)@([^[:space:]]+)$ ]]; then
+            echo "::error::centralConfig must be in owner/repo@ref form: $CENTRAL_CONFIG"
+            exit 1
+          fi
+          {
+            echo "CENTRAL_REPO=${BASH_REMATCH[1]}"
+            echo "CENTRAL_REF=${BASH_REMATCH[2]}"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout central renovate config
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,7 +152,7 @@ jobs:
       # Full runs use the App credentials whenever they are configured and not
       # disabled via the useOdgbotCredentials toggle (forks don't have the
       # credentials configured, so they always dry-run). dryRun does not
-      # affect USE_ODGBOT — the token is still generated (read-only, see
+      # affect USE_ODGBOT - the token is still generated (read-only, see
       # below) so cross-repository read access keeps working.
       USE_ODGBOT: ${{ vars.ODG_BOT_APP_ID != '' && inputs.useOdgbotCredentials }}
     environment:
@@ -168,6 +174,18 @@ jobs:
             echo "name=${TARGET#*/}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve central config location
+        run: |
+          set -euo pipefail
+          if [[ ! "$CENTRAL_CONFIG" =~ ^([^/@[:space:]]+/[^/@[:space:]]+)@([^[:space:]]+)$ ]]; then
+            echo "::error::centralConfig must be in owner/repo@ref form: $CENTRAL_CONFIG"
+            exit 1
+          fi
+          {
+            echo "CENTRAL_REPO=${BASH_REMATCH[1]}"
+            echo "CENTRAL_REF=${BASH_REMATCH[2]}"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout central renovate config
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -181,7 +199,7 @@ jobs:
       # target (unique key per run, prefix-matched on restore; unused entries
       # expire after 7 days). Caches live in the CALLER repository's cache
       # namespace, keyed per target repository. Skipped when the cache is
-      # disabled or reset — reset rebuilds a fresh cache below.
+      # disabled or reset - reset rebuilds a fresh cache below.
       - name: Restore renovate cache
         if: inputs.repoCache == 'enabled'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

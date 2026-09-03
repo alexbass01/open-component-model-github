@@ -117,8 +117,7 @@ jobs:
       repository: ${{ matrix.repository }}
       # Central config is taken from this repository/ref so feature branches
       # test their own config and list end-to-end.
-      centralRepo: ${{ github.repository }}
-      centralRef: ${{ github.ref_name }}
+      centralConfig: ${{ github.repository }}@${{ github.ref_name }}
       repoCache: ${{ inputs.repoCache || 'enabled' }}
       ignoreSchedule: ${{ github.event_name == 'workflow_dispatch' && inputs.ignoreSchedule }}
       logLevel: ${{ inputs.logLevel || 'info' }}
@@ -143,8 +142,7 @@ jobs:
     secrets: inherit
     with:
       repository: ${{ matrix.repository }}
-      centralRepo: ${{ github.repository }}
-      centralRef: ${{ github.ref_name }}
+      centralConfig: ${{ github.repository }}@${{ github.ref_name }}
       repoCache: disabled
       ignoreSchedule: true
       logLevel: info

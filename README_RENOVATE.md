@@ -113,6 +113,13 @@ uses: open-component-model/.github/.github/workflows/renovate.yml@v1.1.0 # exact
 - `@v1` automatically follows the latest compatible release; a breaking workflow
   change ships as `@v2` and does not affect `@v1` consumers.
 
+The central config consumed at runtime comes from the same repository, on the
+same major line as the workflow pin (`centralConfig` input, default
+`open-component-model/.github@v1`). No caller configuration is needed in the
+common case; forks and development setups override it once via the repository
+variable `RENOVATE_CENTRAL_CONFIG` (`owner/repo@ref`) or per run via the input —
+a SHA-pinning caller can pass the same commit for bit-exact reproducibility.
+
 To verify that a floating tag tracks its release:
 
 ```bash
