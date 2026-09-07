@@ -48,6 +48,7 @@ on:
     branches:
       - main
     paths:
+      - .github/renovate-central.json5
       - .github/renovate.json5
       - .github/renovate-repositories.json
       - .github/workflows/renovate.yml

@@ -1,0 +1,35 @@
+// Central renovate configuration for runs orchestrated by
+// .github/workflows/renovate-schedule.yml. This file is the global config for
+// every target repository listed in .github/renovate-repositories.json;
+// repository-local configs (renovate.json[5], .github/renovate.json[5], ...)
+// still apply per repository on top.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  // Commit author: intentionally NOT set via gitAuthor. The workflows run
+  // with platformCommit enabled and GitHub App tokens, so GitHub itself sets
+  // the commit author and renovate auto-discovers its own identity from
+  // whichever App's token the run uses — regardless of whether the run comes
+  // from the central sweeper or a repository-local workflow.
+  //
+  // gitIgnoredAuthors: commits with these author emails count as renovate's
+  // own when checking whether a branch was edited externally (otherwise the
+  // branch is skipped as "pr-edited"). List every GitHub App that may run
+  // renovate against the swept repositories, so branches written by one App's
+  // runs are accepted by another App's runs (e.g. central sweeper vs.
+  // repo-local runs with different credentials). A repository-level
+  // gitIgnoredAuthors REPLACES this list (non-mergeable) — repeat entries you
+  // still need. Keep the list tight: noreply author emails are spoofable.
+  // Derive an email: curl -s https://api.github.com/users/odgbot%5Bbot%5D | grep '"id"' -> <id>+<slug>[bot]@users.noreply.github.com
+  gitIgnoredAuthors: [
+    // (bare email only: renovate compares gitIgnoredAuthors against %ae/%ce
+    // author/committer emails, never against 'Name <email>')
+    // odgbot - production central sweeper for ODG (https://github.com/apps/odgbot)
+    '319464553+odgbot[bot]@users.noreply.github.com',
+    // ocmbot - will be used later again when we expand beyond ODG
+    '125909804+ocmbot[bot]@users.noreply.github.com',
+  ],
+  // Add org-wide defaults here, e.g.:
+  // labels: ['dependencies'],
+  // timezone: 'Europe/Berlin',
+  // schedule: ['at any time'],
+}

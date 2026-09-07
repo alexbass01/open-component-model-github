@@ -88,8 +88,8 @@ env:
   # Path of the central config inside the central repository (checked out
   # sparse into ./central below; RENOVATE_CONFIG_FILE points there for both
   # validation and the renovate run itself).
-  central_config_file: .github/renovate.json5
-  RENOVATE_CONFIG_FILE: ${{ github.workspace }}/central/.github/renovate.json5
+  central_config_file: .github/renovate-central.json5
+  RENOVATE_CONFIG_FILE: ${{ github.workspace }}/central/.github/renovate-central.json5
   # Central config location ("owner/repo@ref"), split into CENTRAL_REPO /
   # CENTRAL_REF per job by the "Resolve central config location" step below —
   # expression contexts cannot split strings. The default tracks the floating
