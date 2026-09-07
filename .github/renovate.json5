@@ -12,15 +12,6 @@
   'internalChecksFilter': 'strict',
   'minimumReleaseAge': '7 days',
   'branchPrefix': 'renovate/',
-  // Commit identity is intentionally unset: renovate runs with platformCommit
-  // and a GitHub App token, so GitHub sets the commit author and renovate
-  // auto-discovers it from the token. All fleet bots that may touch renovate
-  // branches are whitelisted via gitIgnoredAuthors in the central config. Add
-  // a repo-level gitIgnoredAuthors only if an app NOT listed centrally runs
-  // renovate here — it replaces (not extends) the central list, so repeat
-  // entries you still need.
-  // drip-feed PRs so the initial onboarding wave doesn't flood reviewers;
-  // renovate opens more as PRs get merged
   prConcurrentLimit: 5,
   prHourlyLimit: 0,
   automerge: false,
@@ -32,7 +23,7 @@
   packageRules: [
     {
       // Majors wait as checkboxes in the dependency dashboard ("Pending
-      // Approval") instead of occupying prConcurrentLimit slots — tick one
+      // Approval") instead of occupying prConcurrentLimit slots - tick one
       // there to have its PR created when you're ready to work on it.
       matchUpdateTypes: ['major'],
       dependencyDashboardApproval: true,
