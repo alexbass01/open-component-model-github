@@ -20,7 +20,6 @@ on:
     # exclusively when one of its files changes.
     paths:
       - '.github/workflows/renovate.yml'
-      - '.github/workflows/renovate-self.yml'
       - '.github/workflows/renovate-schedule.yml'
       - '.github/renovate-central.json5'
       - '.github/renovate.json5'
