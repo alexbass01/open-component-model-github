@@ -20,7 +20,7 @@ This file is checked out at runtime by `renovate.yml` (via the `centralConfig`
 input, defaulting to `open-component-model/.github@v1`) and passed to Renovate
 as `RENOVATE_CONFIG_FILE`. It is applied on every `workflow_call` — both the
 nightly sweep and any self-hosted caller workflow — before the repository's own
-`renovate.json[5]` is layered on top.
+`.github/renovate.json5` is layered on top.
 
 Currently it sets:
 
@@ -40,8 +40,8 @@ Currently it sets:
   > # -> <id>+<slug>[bot]@users.noreply.github.com
   > ```
 
-Org-wide defaults (labels, timezone, schedule, automerge policies, etc.) can be
-added here and will apply to every repository without any per-repo configuration.
+Org-wide defaults (labels, timezone, schedule, automerge policies, etc.) will be
+added here later and will apply to every repository without any per-repo configuration.
 
 ## How the Renovate setup works
 
