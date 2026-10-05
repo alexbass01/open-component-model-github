@@ -1,0 +1,13 @@
+# Repositories covered by the hourly renovation sweep.
+#
+# This list IS the onboarding gate: adding an entry (reviewed in PRs via
+# CODEOWNERS) opts the repository in. Comments welcome - note ownership or
+# special circumstances next to an entry when useful.
+#
+# ORDER MATTERS for pull requests: the first entry doubles as the PR canary
+# (same-repository PRs dry-run renovate against it, gated by the validate
+# job). Keep a low-risk repository first.
+# - open-component-model/.github # canary entry
+# - open-component-model/odg-core
+- alexbass01/open-component-model-github
+- alexbass01/odg-ui

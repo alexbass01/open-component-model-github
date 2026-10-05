@@ -2,9 +2,54 @@
 // .github/workflows/renovate-schedule.yml. This file is the global config for
 // every target repository listed in .github/renovate-repositories.json;
 // repository-local configs (renovate.json[5], .github/renovate.json[5], ...)
-// still apply per repository on top.
+// layer ON TOP per repository. Repositories without their own config run on
+// this file alone.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  // Shared base stack for ALL swept repositories (previously duplicated
+  // between this repository's own renovate.json5 and odg-core's). Repository
+  // configs override whatever they need (e.g. open-delivery-gear sets
+  // prConcurrentLimit: 0).
+  extends: [
+    'config:recommended',
+    'config:best-practices',
+    'helpers:pinGitHubActionDigests',
+    'docker:pinDigests',
+    'security:openssf-scorecard',
+    ':dependencyDashboard',
+    ':rebaseStalePrs',
+  ],
+  internalChecksFilter: 'strict',
+  minimumReleaseAge: '7 days',
+  branchPrefix: 'renovate/',
+  // Drip-feed PRs (0 hourly = unlimited) so the initial onboarding wave after
+  // enabling renovate on a repository doesn't flood reviewers.
+  prConcurrentLimit: 5,
+  prHourlyLimit: 0,
+  automerge: false,
+  automergeType: 'pr',
+  // Vulnerability alerts stay immediate (no minimum age) and never automerge.
+  vulnerabilityAlerts: {
+    minimumReleaseAge: null,
+    automerge: false,
+  },
+  packageRules: [
+    {
+      // Majors wait as checkboxes in the dependency dashboard ("Pending
+      // Approval") instead of occupying prConcurrentLimit slots — tick one
+      // there to have its PR created when you're ready to work on it.
+      matchUpdateTypes: ['major'],
+      dependencyDashboardApproval: true,
+    },
+    {
+      matchUpdateTypes: ['patch'],
+      automerge: true,
+    },
+    {
+      matchManagers: ['github-actions'],
+      automerge: true,
+    },
+  ],
   // Commit author: intentionally NOT set via gitAuthor. The workflows run
   // with platformCommit enabled and GitHub App tokens, so GitHub itself sets
   // the commit author and renovate auto-discovers its own identity from
@@ -27,9 +72,11 @@
     '319464553+odgbot[bot]@users.noreply.github.com',
     // ocmbot - will be used later again when we expand beyond ODG
     '125909804+ocmbot[bot]@users.noreply.github.com',
+    // github-actions[bot] - GITHUB_TOKEN identity of repo-local jobs that
+    // post-process renovate branches (escape hatch, see decisions). Added
+    // centrally on purpose; cost: ANY workflow bot's commits count as
+    // renovate's own in all swept repos (noreply emails are spoofable, but
+    // the branch-push right is the actual gate - threat model unchanged).
+    '41898282+github-actions[bot]@users.noreply.github.com',
   ],
-  // Add org-wide defaults here, e.g.:
-  // labels: ['dependencies'],
-  // timezone: 'Europe/Berlin',
-  // schedule: ['at any time'],
 }

@@ -7,29 +7,39 @@ workflows are versioned and released, and how consumers pin them.
 
 | File | Purpose |
 | ---- | ------- |
-| `.github/renovate-central.json5` | Central/global Renovate configuration applied to every repository that calls `renovate.yml` - nightly sweep and self-hosted workflows alike (repository-local configs still apply on top) |
-| `.github/renovate-repositories.json` | List of repositories (`owner/name`) covered by the nightly sweep |
-| `.github/workflows/renovate.yml` | Reusable workflow (`workflow_call`) that validates the central config and runs Renovate for ONE target repository |
-| `.github/workflows/renovate-schedule.yml` | Nightly sweeper: fans the repository list out over the reusable workflow; on PRs it validates the config/list plus a dry-run canary |
+| `.github/renovate-central.json5` | Central/global Renovate configuration applied to every repository the sweeper runs (repository-local configs still apply on top) |
+| `.github/renovate-repositories.yaml` | Commented YAML list of repositories (`owner/name`) covered by the hourly sweep; first entry doubles as the PR canary |
+| `.github/workflows/renovate.yml` | Internal building block (`workflow_call`) of the sweeper: validates the central config and runs Renovate for ONE target repository. Called by `renovate-schedule.yml` (sweep matrix + PR canary) and via `workflow_dispatch` for single-repo debug runs - not an API for other repositories |
+| `.github/workflows/renovate-validate.yml` | Thin reusable validator (`workflow_call`): `renovate-config-validator` on one repository file - seconds, read-only, no credentials. The one consumer-facing workflow |
+| `.github/workflows/renovate-schedule.yml` | Hourly sweeper: fans the repository list out over the reusable workflow; on PRs it validates the config/list plus a dry-run canary |
 | `.github/workflows/release-please.yml` | Release automation: release PR from conventional commits → tag `vX.Y.Z` + release → re-pin floating major tag `vX` |
 | `release-please-config.json`, `.release-please-manifest.json` | release-please configuration and the version baseline |
 
 ## Central Renovate config (`.github/renovate-central.json5`)
 
 This file is checked out at runtime by `renovate.yml` (via the `centralConfig`
-input, defaulting to `open-component-model/.github@v1`) and passed to Renovate
-as `RENOVATE_CONFIG_FILE`. It is applied on every `workflow_call` — both the
-nightly sweep and any self-hosted caller workflow — before the repository's own
-`.github/renovate.json5` is layered on top.
+input) and passed to Renovate as `RENOVATE_CONFIG_FILE`, layered UNDER each
+repository's own `.github/renovate.json5`.
+
+The sweeper does not pin a version of it: `renovate-schedule.yml` always
+passes `github.repository@github.ref_name`, so the sweep consumes the config
+at the very ref the run started from and config changes go live fleet-wide
+on merge. The gate is the PR canary + validator, not a release. The `@v1`
+default on the input only matters when nothing overrides it - forks and
+local development (see Versioning and releases).
 
 Currently it sets:
 
-- **`gitIgnoredAuthors`** - the noreply email addresses of every GitHub App that
-  may run Renovate against swept repositories (`odgbot`, `ocmbot`). Renovate
-  treats commits by these authors as its own, so a branch written by one App's
-  run is not skipped as "externally edited" when a different App's run picks it
-  up later (e.g. central sweeper vs. a repo-local workflow with different
-  credentials).
+- **the shared base stack** - extends (recommended/best-practices, digest
+  pinning, dependency dashboard), `minimumReleaseAge`, PR limits, automerge
+  policy (off by default, on for patches and github-actions), major-update
+  dashboard approval, vulnerability-alert overrides. Previously duplicated
+  in consumer configs; now lives only here.
+- **`gitIgnoredAuthors`** - the noreply emails whose commits on renovate
+  branches count as Renovate's own (not "externally edited"): the GitHub Apps
+  that run Renovate (`odgbot`, `ocmbot`) plus `github-actions[bot]`, so
+  repository-local jobs running under GITHUB_TOKEN (e.g. post-processing
+  pushes to `renovate/` branches) don't make renovate skip the branch.
 
   > **Non-mergeable:** a repository-level `gitIgnoredAuthors` *replaces* this
   > list entirely. If you add your own entries, repeat the central ones too.
@@ -45,7 +55,7 @@ added here later and will apply to every repository without any per-repo configu
 
 ## How the Renovate setup works
 
-- `renovate-schedule.yml` runs nightly and resolves the target list (or a
+- `renovate-schedule.yml` runs hourly and resolves the target list (or a
   `workflow_dispatch` override), then calls `renovate.yml` once per repository.
 - `renovate.yml` first validates the central config (`renovate-config-validator`),
   then runs Renovate against the target repository.
@@ -58,98 +68,77 @@ added here later and will apply to every repository without any per-repo configu
   so GitHub itself sets the App as author; no `gitAuthor` is configured centrally.
   PRs are opened under the App identity.
 - **Config layering:** `.github/renovate-central.json5` is loaded on every
-  `renovate.yml` call - nightly sweep and self-hosted workflows alike - and is
-  the global config for every target. The repository's own `renovate.json[5]`
+  `renovate.yml` call (sweep, PR canary, debug dispatch) and is the global
+  config for every target. The repository's own `renovate.json[5]`
   still applies on top.
-  Onboarding PRs are disabled (`RENOVATE_ONBOARDING: false`), so a repository must
-  bring its own Renovate config before it is run.
+  Onboarding PRs are disabled and repository configs are optional: a listed
+  repository without its own config runs on the central config alone
+  (`RENOVATE_ONBOARDING: false` + `RENOVATE_REQUIRE_CONFIG: 'optional'`).
 - Renovate's repository cache lives in the caller repository's cache namespace,
   keyed per target.
 
 ## Onboarding a repository
 
-There are two onboarding modes. Pick the one that fits your repository.
+There is exactly one onboarding mode: the hourly sweep. (Push-reactive
+dispatch - firing a run from the onboarded repository after merges - was
+evaluated and dropped: an edge repository's GITHUB_TOKEN cannot call
+`workflow_dispatch` on this repository, so no zero-credential push-reactive
+variant exists. On-demand re-runs happen via `workflow_dispatch` on
+`renovate.yml` / `renovate-schedule.yml` in this repository.)
 
-### Mode 1 - Nightly sweep (managed, simplest)
+### Hourly sweep (managed, simplest)
 
-The central sweeper runs every repository on its list nightly. You hand off
+The central sweeper runs every repository on its list hourly. You hand off
 scheduling and credentials entirely.
 
-1. Add `.github/renovate.json5` to the repository (by convention, always use
-   this path). Extend presets / add rules there; the central config at
-   `.github/renovate-central.json5` in *this* repository applies on top.
+1. (Optional) Add `.github/renovate.json5` to the repository (by convention,
+   always use this path) when you need repository-specific rules; the central
+   config at `.github/renovate-central.json5` in *this* repository applies
+   underneath. A repository without its own config still runs - on the
+   central config alone.
    > **Note on non-mergeable arrays:** a repository-level `gitIgnoredAuthors`
    > *replaces* the central allowlist (the App identities whose branch commits
    > are accepted as renovate's own across sweeper/caller runs). Repeat the
    > central entries if you add your own.
-2. Add the repository's `owner/name` to `.github/renovate-repositories.json`
-   in this repository - the nightly sweep picks it up from the next run on.
+2. Add the repository's `owner/name` to `.github/renovate-repositories.yaml`
+   in this repository (YAML - comment freely) - the hourly sweep picks it up
+   from the next run on.
 3. Install the `ODG_BOT` GitHub App on the repository with the permissions
    requested in `renovate.yml` (contents, issues, pull-requests, statuses,
    workflows; read on checks/vulnerability-alerts).
+4. (Optional) Validate config edits on the repository's own PRs - see
+   [Validating a repository's renovate config on PRs](#validating-a-repositorys-renovate-config-on-prs)
+   below.
 
-### Mode 2 - Self-hosted workflow (own credentials, own schedule, central workflow)
+## Validating a repository's renovate config on PRs
 
-Use this mode when you need your own schedule, triggers (push/PR), or want to
-supply your own GitHub App / token instead of relying on `odgBot`.
-
-Add a caller workflow to your repository that references the reusable workflow
-here. The `odg-core` repository is a reference example:
+Edge repositories can validate their own `.github/renovate.json5` in pull
+requests with the thin reusable validator - seconds, read-only, no
+credentials:
 
 ```yaml
-# .github/workflows/renovate.yml in your repository
-name: Renovate
+# .github/workflows/renovate-validate.yml in your repository
+name: Validate renovate config
 on:
-  schedule:
-    - cron: '0 1 * * *'       # nightly at 1 am UTC
-  push:
-    branches: [main]         # rebase/automerge after merges
   pull_request:
-    branches: [main]
     paths:
-      - .github/workflows/renovate.yml
       - .github/renovate.json5
-  workflow_dispatch:
-    inputs:
-      repoCache:
-        description: 'Repository cache: enabled, disabled, reset'
-        type: choice
-        default: enabled
-        options: [enabled, disabled, reset]
-      ignoreSchedule:
-        type: boolean
-        default: false
-      logLevel:
-        type: choice
-        default: info
-        options: [info, debug]
-      useOdgbotCredentials:
-        description: 'Use GitHub App credentials if configured (else: GITHUB_TOKEN)'
-        type: boolean
-        default: true
 
 permissions:
   contents: read
 
 jobs:
-  renovate:
-    uses: open-component-model/.github/.github/workflows/renovate.yml@v1
-    secrets: inherit
-    with:
-      repository: ${{ github.repository }}
-      repoCache: ${{ inputs.repoCache || 'enabled' }}
-      ignoreSchedule: ${{ github.event_name == 'workflow_dispatch' && inputs.ignoreSchedule }}
-      logLevel: ${{ inputs.logLevel || 'info' }}
-      useOdgbotCredentials: ${{ github.event_name != 'workflow_dispatch' || inputs.useOdgbotCredentials }}
-      dryRun: ${{ github.event_name == 'pull_request' }}
+  validate:
+    uses: open-component-model/.github/.github/workflows/renovate-validate.yml@v1
+    # with:
+    #   configFile: .github/renovate.json5  # default; point elsewhere if needed
 ```
 
-In this mode you do **not** need to be added to `.github/renovate-repositories.json`.
-The workflow uses the credentials available in your repository's environment; if
-`ODG_BOT` is installed and configured (`vars.ODG_BOT_APP_ID` +
-`secrets.ODG_BOT_PRIVATE_KEY`), it is used for write runs; otherwise the job
-falls back to a read-only dry-run. Your repository still needs its own
-`.github/renovate.json5` (by convention, always use this path; same note about `gitIgnoredAuthors` applies).
+It runs `renovate-config-validator` with the same pinned renovate version as
+the sweeper (one renovate PR bumps all pins together) and answers "is the
+file valid". Whether it *behaves* as expected is answered by a dry-run of
+`renovate.yml` in this repository (`workflow_dispatch` with `dryRun: true`) -
+heavier (minutes), run on demand.
 
 ## Versioning and releases
 
@@ -194,20 +183,21 @@ falls back to `GITHUB_TOKEN`, which requires that setting to be enabled.
 Reusable workflows are pinned by git ref, like actions:
 
 ```yaml
-uses: open-component-model/.github/.github/workflows/renovate.yml@v1     # floating major (recommended)
-uses: open-component-model/.github/.github/workflows/renovate.yml@v1.1.0 # exact release
+uses: open-component-model/.github/.github/workflows/renovate-validate.yml@v1     # floating major (recommended)
+uses: open-component-model/.github/.github/workflows/renovate-validate.yml@v1.1.0 # exact release
 ```
 
 - `@v1.X.Y` never moves - fully reproducible.
 - `@v1` automatically follows the latest compatible release; a breaking workflow
   change ships as `@v2` and does not affect `@v1` consumers.
 
-The central config consumed at runtime comes from the same repository, on the
-same major line as the workflow pin (`centralConfig` input, default
-`open-component-model/.github@v1`). No caller configuration is needed in the
-common case; forks and development setups override it once via the repository
-variable `RENOVATE_CENTRAL_CONFIG` (`owner/repo@ref`) or per run via the input -
-a SHA-pinning caller can pass the same commit for bit-exact reproducibility.
+`renovate.yml`'s `centralConfig` input resolves to
+`vars.RENOVATE_CENTRAL_CONFIG` and falls back to
+`open-component-model/.github@v1` - i.e. the config on the same major line
+as a workflow pinned to `@vX`. The sweeper overrides it anyway (same ref as
+the run), so the fallback only matters for forks/development setups and
+ad-hoc `workflow_dispatch` runs. A caller wanting bit-exact reproducibility
+can pass `owner/repo@<same-sha>` explicitly.
 
 To verify that a floating tag tracks its release:
 

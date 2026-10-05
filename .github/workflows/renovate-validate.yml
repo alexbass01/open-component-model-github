@@ -1,0 +1,49 @@
+# Thin reusable renovate config validator for ONE file (inputs.configFile).
+#
+# The ONLY consumer-facing workflow of this repository (unlike renovate.yml,
+# which is the sweeper's internal building block). Seconds, read-only, no
+# credentials. Intended use: edge repositories call it on pull requests that
+# touch their renovate config. It answers "is the file valid" - NOT "does it
+# behave as expected" (that is the PR dry-run's job).
+#
+# Uses the same renovatebot/github-action + pinned renovate-version as
+# renovate.yml, so the customManager in .github/renovate.json5 tracks all
+# pins with one regex.
+name: Renovate config validator
+
+on:
+  workflow_call:
+    inputs:
+      configFile:
+        description: Repository-relative path of the renovate config to validate
+        required: false
+        type: string
+        default: .github/renovate.json5
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ${{ inputs.configFile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c2103c8cd30a65c8171025f9ec24c8b8b60b51 # v4.2.2
+
+      - name: Prepare validator script
+        env:
+          CONFIG_FILE: ${{ inputs.configFile }}
+        run: |
+          cat <<'EOF' > renovate-config-validator.sh
+          #!/bin/bash
+          renovate-config-validator "$CONFIG_FILE"
+          EOF
+          chmod +x renovate-config-validator.sh
+
+      - name: Validate renovate config
+        uses: renovatebot/github-action@39b914146caeff8cd512e61c8992f1d5913af85c # v46.2.5
+        with:
+          docker-cmd-file: renovate-config-validator.sh
+          renovate-version: '44.39.0@sha256:e331219979fc6b38fc5cf7cd5beda63d4fc19963c3ef20404a2e99c8c12118a0'
+          token: ${{ secrets.GITHUB_TOKEN }}

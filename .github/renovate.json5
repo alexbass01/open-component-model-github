@@ -1,47 +1,14 @@
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
-  extends: [
-    'config:recommended',
-    'config:best-practices',
-    'helpers:pinGitHubActionDigests',
-    'docker:pinDigests',
-    'security:openssf-scorecard',
-    ':dependencyDashboard',
-    ':rebaseStalePrs',
-  ],
-  'internalChecksFilter': 'strict',
-  'minimumReleaseAge': '7 days',
-  'branchPrefix': 'renovate/',
-  prConcurrentLimit: 5,
-  prHourlyLimit: 0,
-  automerge: false,
-  automergeType: 'pr',
-  vulnerabilityAlerts: {
-    minimumReleaseAge: null,
-    automerge: false,
-  },
-  packageRules: [
-    {
-      // Majors wait as checkboxes in the dependency dashboard ("Pending
-      // Approval") instead of occupying prConcurrentLimit slots - tick one
-      // there to have its PR created when you're ready to work on it.
-      matchUpdateTypes: ['major'],
-      dependencyDashboardApproval: true,
-    },
-    {
-      matchUpdateTypes: ['patch'],
-      automerge: true,
-    },
-    {
-      matchManagers: ['github-actions'],
-      automerge: true,
-    },
-  ],
+  // The shared base stack lives in renovate-central.json5 (global config,
+  // layered UNDER this file - also for this repository itself when the
+  // sweeper runs it). Only repository-specific settings stay here.
   customManagers: [
     {
-      // Track the Renovate version used in the reusable workflow
+      // Track the Renovate version pins used in renovate.yml and
+      // renovate-validate.yml (one renovate PR bumps them together)
       customType: 'regex',
-      managerFilePatterns: ['.github/workflows/renovate.yml'],
+      managerFilePatterns: ['.github/workflows/renovate.yml', '.github/workflows/renovate-validate.yml'],
       matchStrings: ["renovate-version:\\s*'(?<currentValue>[^'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?'"],
       depNameTemplate: 'ghcr.io/renovatebot/renovate',
       datasourceTemplate: 'docker',
