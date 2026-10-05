@@ -1,22 +1,24 @@
 name: Renovate Schedule
 # Central renovate sweeper: runs the reusable renovate workflow
 # (.github/workflows/renovate.yml) for every repository in the saved list
-# (.github/renovate-repositories.json) in parallel (matrix fan-out).
+# (.github/renovate-repositories.yaml) in parallel (matrix fan-out).
 #
 # Onboarding a repository:
-# - add its owner/name to .github/renovate-repositories.json (onboarding PRs
-#   are disabled, so the repository needs its own renovate config),
+# - add its owner/name to .github/renovate-repositories.yaml; repositories
+#   without their own renovate config still run on the central config alone
+#   (RENOVATE_ONBOARDING=false + RENOVATE_REQUIRE_CONFIG=optional in
+#   renovate.yml keep that explicit),
 # - for full runs the GitHub App (vars.ODG_BOT_APP_ID / secrets.ODG_BOT_PRIVATE_KEY)
-#   must be installed on it with the permissions requested in renovate.yml,
-# - optionally keep a thin caller workflow in the repository for push-triggered
-#   rebase/automerge runs.
+#   must be installed on it with the permissions requested in renovate.yml.
+# Edge repositories do NOT keep caller workflows: single-repo re-runs happen
+# via workflow_dispatch here or in renovate.yml.
 #
 # Forks: set the repository variable RENOVATE_CENTRAL_OWNER to your user/org
 # name to enable scheduled full sweeps (default: open-component-model).
 # Without App credentials all runs degrade to read-only dry-runs.
 on:
   schedule:
-    - cron: '0 1 * * *' # Daily at 01:00 UTC (02:00/03:00 CET/CEST)
+    - cron: '0 * * * *' # Hourly
   workflow_dispatch:
     inputs:
       repositories:
@@ -50,7 +52,7 @@ on:
     paths:
       - .github/renovate-central.json5
       - .github/renovate.json5
-      - .github/renovate-repositories.json
+      - .github/renovate-repositories.yaml
       - .github/workflows/renovate.yml
       - .github/workflows/renovate-schedule.yml
 
@@ -62,7 +64,7 @@ permissions:
   contents: read
 
 env:
-  REPO_LIST_FILE: .github/renovate-repositories.json
+  REPO_LIST_FILE: .github/renovate-repositories.yaml
 
 jobs:
   # Resolves the target list (dispatch override or saved file) and validates
@@ -90,7 +92,9 @@ jobs:
           if [ -n "$DISPATCH_REPOS" ]; then
             printf '%s' "$DISPATCH_REPOS" | jq -Rs 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))' > repos.json
           else
-            jq '.' "$REPO_LIST_FILE" > repos.json
+            # list is commented YAML; yq converts to JSON so everything
+            # downstream (structure validation, outputs, matrix) stays JSON
+            yq -o=json '.' "$REPO_LIST_FILE" > repos.json
           fi
           jq -e 'type == "array" and all(.[]; (type == "string") and test("^[^/[:space:]]+/[^/[:space:]]+$"))' repos.json
           {
@@ -149,3 +153,38 @@ jobs:
       logLevel: info
       useOdgbotCredentials: true
       dryRun: true
+
+  # Collects the matrix results and fails the run loudly whenever any sweep
+  # leg failed (sweep uses fail-fast: false, so a failing repository would
+  # otherwise pass unnoticed between successful legs). Lists the failed
+  # repositories via the jobs API - the aggregate needs.sweep.result alone
+  # cannot name them. Later extension points: open/update an issue, surface
+  # rate-limit failures distinctly.
+  report:
+    needs: sweep
+    if: ${{ always() && needs.sweep.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Fail loudly on failed sweep legs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SWEEP_RESULT: ${{ needs.sweep.result }}
+        run: |
+          set -euo pipefail
+          echo "sweep aggregate result: $SWEEP_RESULT"
+          # per_page=100 is enough for the current fleet; revisit pagination
+          # when the repository list approaches that size.
+          failed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("sweep (")) | select(.conclusion == "failure") | .name | ltrimstr("sweep (") | rtrimstr(")")] | unique')
+          echo "$failed" | jq -r 'if length == 0 then "All sweep legs succeeded." else "Failed repositories:\n" + join("\n") end' | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$(echo "$failed" | jq 'length')" -gt 0 ]; then
+            echo "::error title=Renovate sweep failures::$(echo "$failed" | jq -r 'join(", ")')"
+            exit 1
+          fi
+          if [ "$SWEEP_RESULT" != 'success' ]; then
+            echo "::error title=Renovate sweep::$SWEEP_RESULT (no failing legs found in the jobs API - check the workflow run)"
+            exit 1
+          fi

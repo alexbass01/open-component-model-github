@@ -1,10 +1,10 @@
 name: Renovate Open Delivery Gear
-# Reusable renovate runner for ONE target repository (inputs.repository).
+# Renovate runner for ONE target repository (inputs.repository).
 #
-# Callers:
+# Callers (internal only, not an API for edge repositories):
 # - .github/workflows/renovate-schedule.yml (central sweeper over the saved
-#   repository list .github/renovate-repositories.json)
-# - individual repositories via a thin caller workflow (push/PR/dispatch)
+#   repository list .github/renovate-repositories.yaml, plus PR canary)
+# - workflow_dispatch in this repository for single-repo debug runs
 #
 # Credentials: full runs need a GitHub App (vars.ODG_BOT_APP_ID +
 # secrets.ODG_BOT_PRIVATE_KEY) installed on the target repository; otherwise the
@@ -251,7 +251,13 @@ jobs:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           renovate-version: '44.39.0@sha256:e331219979fc6b38fc5cf7cd5beda63d4fc19963c3ef20404a2e99c8c12118a0'
         env:
+          # Swept repositories without their own renovate config still run on
+          # the central config alone: onboarding PRs stay disabled and
+          # requireConfig must not be 'required' (renovate would silently
+          # skip config-less repositories). Do NOT use 'ignored' - it would
+          # also ignore repos that DO have their own config.
           RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: 'optional'
           # Commit authorship is set by GitHub itself via platformCommit (no
           # gitAuthor configured anywhere). RENOVATE_USERNAME is deliberately
           # unset: renovate auto-discovers the identity from the token
@@ -263,7 +269,12 @@ jobs:
           RENOVATE_REPOSITORY_CACHE: ${{ inputs.repoCache }}
           RENOVATE_FORCE: ${{ inputs.ignoreSchedule && '{"schedule":null}' || '' }}
           LOG_LEVEL: ${{ inputs.logLevel }}
-          RENOVATE_ALLOWED_POST_UPGRADE_COMMANDS: '["python3"]'
+          # RENOVATE_ALLOWED_POST_UPGRADE_COMMANDS deliberately unset:
+          # renovate's default allowlist is EMPTY, so no swept repository can
+          # execute postUpgradeTasks on the central runner in the context of
+          # the org-wide ODGBot token. Escape hatch (documented in decisions):
+          # post-processing in the edge repo reacting on renovate/ branch
+          # pushes.
 
       # Only full runs write back an up-to-date cache.
       - name: Save renovate cache
