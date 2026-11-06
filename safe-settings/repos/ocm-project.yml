@@ -6,5 +6,3 @@ teams:
   permission: admin
 - name: Collaborators
   permission: triage
-- name: project-management
-  permission: maintain

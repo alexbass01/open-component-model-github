@@ -22,6 +22,7 @@ suborgrepos:
   - service-model
   - service-provider-odg
   - signing-server
+  - cosign
 
 # This are the settings that will be applied to the repositories listed above.
 # See https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-an-organization-repository for all available settings for a repository
